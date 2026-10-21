@@ -1,0 +1,7 @@
+# Optional Render Blueprint. Repo root = this folder, so no rootDir is needed.
+services:
+  - type: web
+    name: krr31-expert-system
+    runtime: docker
+    plan: free
+    healthCheckPath: /health

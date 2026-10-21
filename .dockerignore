@@ -1,0 +1,5 @@
+.git
+.gitignore
+*.zip
+results/
+__pycache__/
