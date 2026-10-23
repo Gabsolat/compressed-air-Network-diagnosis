@@ -98,16 +98,16 @@ Steps 1-9 are implemented in code, but: the Prolog has not been run; thresholds 
 and report text are not written; unit tests per predicate are not written.
 
 ## 10. Deployment (Docker, Render via GitHub)
-Files: `Dockerfile`, `server.pl` (HTTP routes), `web.pl` (HTML pages), `render.yaml`, `.dockerignore`.
+Files: `Dockerfile`, `server.pl` (HTTP routes), `web.pl` (HTML pages), `static/` (CSS and JavaScript), `render.yaml`, `.dockerignore`.
 1. Push this folder to GitHub (commit `data/cases.pl`; the image does not need Python).
 2. Render: New > Web Service > connect the repo > Language/Runtime: **Docker**. The repo root is this folder (`Dockerfile` next to `main.pl`), so leave Root Directory empty.
 3. Health check path: `/health`. Render supplies `PORT`; the server reads it (default 10000).
-4. Pages: `/` (input form: enter your own readings, or load a synthetic example), `/diagnose` (detailed diagnosis of the submitted readings), `/cases` (built-in test cases),
-   `/demo?id=c001`, `/results` (evaluation report), `/health`.
-   The diagnosis page walks through: 1 readings received (and any sensor judged implausible) | 2 engineering checks (formula, value, limit, result) |
-   3 rules that fired, with their knowledge source | 4 abductive and consistency-based reasoning | 5 what was ruled out and why |
-   6 evidence table and rejected hypotheses | 7 prioritised maintenance plan.
-   `web.pl` maps every internal atom to readable text with true subscripts (e.g. P<sub>use</sub>, F<sub>L</sub>), so underscores never appear in the web app. The terminal output of `main.pl` still shows raw atom names.
+4. Pages: `/` (input form with a live pressure-profile chart, a readings counter and a guide to what the entered readings can assess), `/diagnose` (detailed diagnosis report),
+   `/cases` (built-in test cases), `/demo?id=c001`, `/results` (evaluation report), `/health`.
+   The report has a pressure-profile chart, a section index and seven numbered steps: readings received (and any sensor judged implausible), engineering checks (formula, value, limit, bar against limit, result),
+   rules that fired with their knowledge source, abductive and consistency-based reasoning, what was ruled out, the evidence table with rejected hypotheses, and a prioritised maintenance plan.
+   Design: `static/style.css` and `static/app.js` (no external libraries or fonts; light and dark themes; print stylesheet). `web.pl` maps every internal atom to readable text with true subscripts, so underscores never appear in the web app.
+   The terminal output of `main.pl` still shows raw atom names.
 Local test: `docker build -t krr31 . && docker run -p 10000:10000 krr31`, then open `http://localhost:10000/results`.
 Notes: free-tier services sleep when idle, and `/results` runs the whole evaluation, so the first call can be slow. The Dockerfile uses `swipl:stable`; pin an exact tag
 and record it as your Prolog version. **Neither the Docker build, the server nor the web pages have been run yet** (same status as the Prolog code).

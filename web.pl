@@ -121,41 +121,22 @@ esc(In, Out) :-
 sanitize(In, Out) :- esc(In, E), replace_all(E, '_', ' ', Out).
 
 % ---------- page template ----------
-css(C) :- css_lines(L), atomic_list_concat(L, C).
-css_lines([
-    ':root{--bg:#f6f7f9;--fg:#1c2330;--muted:#5c6675;--card:#fff;--line:#dde1e8;--accent:#0b5cad;--ok:#1a7f4b;--warn:#b45309;--bad:#b42318}',
-    '@media (prefers-color-scheme:dark){:root{--bg:#12161d;--fg:#e6e9ef;--muted:#9aa4b2;--card:#1a2029;--line:#2c3542;--accent:#6ab0ff;--ok:#4cc38a;--warn:#f0a43a;--bad:#ff7b72}}',
-    '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}',
-    'main{max-width:980px;margin:0 auto;padding:24px 16px 48px}',
-    'h1{font-size:1.5rem;margin:0 0 4px}h2{font-size:1.1rem;margin:24px 0 8px}',
-    '.sub{color:var(--muted);margin:0 0 16px}a{color:var(--accent)}',
-    '.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:10px 0}',
-    'table{border-collapse:collapse;width:100%}th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}',
-    'th{font-weight:600;color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.03em}',
-    'td.num{text-align:right;font-variant-numeric:tabular-nums}',
-    '.chip{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 10px;margin:2px 4px 2px 0;font-size:.9rem;background:var(--bg)}',
-    '.badge{display:inline-block;border-radius:6px;padding:2px 10px;font-weight:600;margin:2px 6px 2px 0;border:1px solid var(--accent);color:var(--accent)}',
-    '.badge.ok{border-color:var(--ok);color:var(--ok)}.badge.bad{border-color:var(--bad);color:var(--bad)}',
-    '.urgent{border-left:5px solid var(--bad)}.high{border-left:5px solid var(--warn)}.medium{border-left:5px solid var(--accent)}',
-    '.muted{color:var(--muted)}select,button{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}',
-    'button{background:var(--accent);color:#fff;border-color:var(--accent);cursor:pointer}',
-    'pre.report{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace}',
-    'footer{margin-top:32px;color:var(--muted);font-size:.85rem}',
-    '.tablewrap{overflow-x:auto}'
-]).
-
-
 page_start(Title) :-
     format("Content-Type: text/html; charset=UTF-8~n~n"),
-    css(C),
     format("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"),
     format("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"),
-    format("<title>~w</title><style>~w</style></head><body><main>", [Title, C]),
-    format("<nav class=\"muted\"><a href=\"/\">Diagnose</a><a href=\"/cases\">Test cases</a><a href=\"/results\">Evaluation report</a></nav>").
+    format("<title>~w | Compressed-air diagnosis</title>", [Title]),
+    format("<script>(function(){try{var t=localStorage.getItem('krr-theme');if(!t){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t}catch(e){}})();</script>"),
+    format("<link rel=\"stylesheet\" href=\"/static/style.css\"><script defer src=\"/static/app.js\"></script></head><body>"),
+    format("<header class=\"site\"><div class=\"wrap bar\"><a class=\"brand\" href=\"/\">"),
+    format("<svg class=\"mark\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M3.5 17a8.5 8.5 0 0 1 17 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><path d=\"M12 17l4.2-5.4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><circle cx=\"12\" cy=\"17\" r=\"1.8\" fill=\"currentColor\"/></svg>"),
+    format("<span>Compressed-air diagnosis</span></a>"),
+    format("<nav aria-label=\"Main\"><a href=\"/\">Diagnose</a><a href=\"/cases\">Test cases</a><a href=\"/results\">Evaluation</a></nav>"),
+    format("<button type=\"button\" id=\"theme-toggle\" class=\"btn ghost\">Dark mode</button></div></header><main id=\"main\">").
 page_end :-
-    format("<footer>KRR Mini-Project 31 &ndash; Prolog expert system for compressed-air network fault diagnosis. "),
-    format("Decision support only: thresholds are engineering assumptions of this prototype and must be confirmed against your plant standards. "),
-    format("The built-in test cases are <strong>synthetic</strong>.</footer></main></body></html>~n").
+    format("</main><footer class=\"site-foot\"><div class=\"wrap\">"),
+    format("Decision support only. The limits used here are engineering assumptions of this prototype and must be confirmed against your plant standards. The built-in test cases are synthetic."),
+    format("</div></footer></body></html>~n").
 
 chips([], _) :- !, format("<span class=\"muted\">none</span>").
 chips(L, Goal) :- forall(member(X, L), ( call(Goal, X, H), format("<span class=\"chip\">~w</span>", [H]) )).
@@ -290,44 +271,76 @@ prefill(Request, Pre) :-
     ;  parse_inputs(Request, Pre0, _), Pre = Pre0 ).
 
 % ---------- form page ----------
+group_help('Compressor and power', 'Output, loading and condition of the compressor.').
+group_help('Receiver', 'Storage vessel pressure, cycling and condensate drain.').
+group_help('Air treatment', 'Dryer and filter pressure drop, and dew point.').
+group_help('Distribution and point of use', 'Header, regulator and end-use readings.').
+
+example_label(a_normal, 'Healthy network').     example_label(b_leak, 'Leakage').
+example_label(c_comp, 'Compressor deficiency'). example_label(d_filter, 'Clogged filter').
+example_label(d_dryer, 'Dryer fault').          example_label(e_header, 'Line restriction').
+example_label(x_receiver, 'Receiver drain failure'). example_label(x_regulator, 'Regulator fault').
+example_label(x_sensor, 'Faulty sensor').       example_label(f_multi, 'Two faults at once').
+
 form_page(Pre, Errors) :-
-    page_start('Compressed-air network diagnosis'),
-    format("<div class=\"hero\"><h1>Compressed-Air Network Fault Diagnosis</h1>"),
+    page_start('Diagnose'),
+    format("<section class=\"intro wrap\"><div><h1>Compressed-air network fault diagnosis</h1>"),
     format("<p class=\"lead\">Enter the readings you have from your compressor station and distribution network. "),
-    format("The expert system checks them against engineering rules, explains every step of its reasoning, and recommends corrective maintenance. "),
-    format("It looks for leaks, filter and dryer problems, compressor and regulator faults, receiver and line restrictions, and faulty instruments.</p>"),
-    format("<p class=\"muted\">Leave a field blank if you have no measurement and never guess one. More readings give a more specific diagnosis.</p></div>"),
-    forall(member(E, Errors), format("<div class=\"card err\">~w</div>", [E])),
-    format("<form action=\"/diagnose\" method=\"get\">"),
+    format("The expert system checks them against engineering rules, explains each step of its reasoning and recommends corrective maintenance.</p>"),
+    format("<p class=\"muted\">It looks for leaks, filter and dryer problems, compressor and regulator faults, receiver and line restrictions, and faulty instruments. "),
+    format("Leave a field blank if you have no measurement, and never guess one. The grey numbers inside the fields are typical healthy values.</p></div>"),
+    format("<figure class=\"chart-card\"><figcaption>Pressure profile along your network</figcaption>"),
+    format("<div id=\"profile\" class=\"profile\"></div><p class=\"chart-note\" id=\"profile-note\"></p></figure></section>"),
+    forall(member(E, Errors), format("<div class=\"wrap\"><div class=\"alert\" role=\"alert\">~w</div></div>", [E])),
+    examples_section,
+    format("<form id=\"diag\" class=\"wrap layout\" action=\"/diagnose\" method=\"get\" novalidate><div>"),
     forall(field_group(Title, Vars),
-           ( format("<h2>~w</h2><div class=\"card grid\">", [Title]),
+           ( group_help(Title, Help),
+             format("<fieldset class=\"group\"><legend>~w</legend><p class=\"group-help\">~w</p><div class=\"fields\">", [Title, Help]),
              forall(member(V, Vars), field_html(V, Pre)),
-             format("</div>") )),
-    format("<p><button type=\"submit\">Diagnose</button> &nbsp; <a href=\"/\">Clear the form</a></p></form>"),
-    format("<h2>Try an example</h2><div class=\"card\"><p class=\"muted\">Fills the form with a built-in synthetic case, then press Diagnose.</p>"),
-    forall(( member(G, [a_normal,b_leak,c_comp,d_filter,d_dryer,e_header,x_receiver,x_regulator,x_sensor,f_multi]),
-             once(case(Id, G, _, _, _, _, _, _)) ),
-           ( glabel(G, GL), format("<a class=\"chip pill\" href=\"/?example=~w\">~w</a>", [Id, GL]) )),
+             format("</div></fieldset>") )),
     format("</div>"),
+    input_panel,
+    format("</form>"),
     page_end.
+
+examples_section :-
+    format("<section class=\"examples wrap\"><strong>Start from an example</strong> "),
+    forall(( member(G, [a_normal,b_leak,c_comp,d_filter,d_dryer,e_header,x_receiver,x_regulator,x_sensor,f_multi]),
+             once(case(_, G, _, _, _, _, Obs, _)), example_label(G, L), obs_query(Obs, Q) ),
+           format("<button type=\"button\" class=\"chip example\" aria-pressed=\"false\" data-obs=\"~w\">~w</button>", [Q, L])),
+    format("<span class=\"muted\"> Synthetic cases that fill the form. Then run the diagnosis.</span></section>").
+
+input_panel :-
+    obs_order(Ord), length(Ord, N),
+    format("<aside class=\"panel\" aria-label=\"Summary of your inputs\">"),
+    format("<div class=\"count\"><b id=\"count\">0</b><span class=\"muted\">of ~d readings entered</span></div>", [N]),
+    format("<div class=\"meterbar\"><i id=\"count-bar\"></i></div>"),
+    format("<h2>What your readings can assess</h2><ul class=\"caps\" id=\"caps\"></ul>"),
+    format("<p class=\"msg\" id=\"form-msg\" role=\"status\"></p>"),
+    format("<div class=\"actions\"><button type=\"submit\" class=\"btn primary\">Run diagnosis</button>"),
+    format("<button type=\"button\" class=\"btn\" id=\"clear\">Clear all</button></div></aside>").
 
 field_html(V, Pre) :-
     var_html(V, H), var_unit(V, U), var_hint(V, Hint), var_desc(V, D),
     (  memberchk(V=X, Pre) -> format(atom(Val), '~4f', [X]) ; Val = '' ),
-    format("<label class=\"field\"><span>~w <span class=\"muted\">(~w)</span></span>", [H, U]),
-    format("<input type=\"number\" step=\"any\" name=\"~w\" value=\"~w\" placeholder=\"e.g. ~w\">", [V, Val, Hint]),
-    format("<small class=\"muted\">~w</small></label>", [D]).
+    (  temp_var(V) -> Min = '' ; Min = ' min="0"' ),
+    (  V == load -> Max = ' max="1.05"' ; Max = '' ),
+    format("<div class=\"field\"><label for=\"f-~w\"><span class=\"sym\">~w</span><span class=\"desc\">~w</span></label>", [V, H, D]),
+    format("<div class=\"input\"><input id=\"f-~w\" type=\"number\" step=\"any\" inputmode=\"decimal\" name=\"~w\" value=\"~w\" placeholder=\"~w\"~w~w>", [V, V, Val, Hint, Min, Max]),
+    format("<span class=\"unit\">~w</span></div></div>", [U]).
 
 % ---------- list of built-in test cases ----------
 cases_page :-
     page_start('Test cases'),
-    format("<h1>Built-in test cases</h1><p class=\"sub\">Synthetic cases used to evaluate the system. Choose one to see the full diagnosis.</p>"),
+    format("<div class=\"wrap\" style=\"padding-top:36px\"><h1>Built-in test cases</h1>"),
+    format("<p class=\"lead\">Synthetic cases used to evaluate the system. Choose one to see its full diagnosis.</p>"),
     format("<div class=\"card\"><form action=\"/demo\" method=\"get\"><select name=\"id\">"),
     forall(case(Id, G, _, True, _, _, _, _),
            ( glabel(G, GL), findall(P, (member(F, True), fault_plain(F, P)), Ps),
              atomic_list_concat(Ps, ' + ', TL),
-             format("<option value=\"~w\">~w &middot; ~w &middot; label: ~w</option>", [Id, Id, GL, TL]) )),
-    format("</select> <button type=\"submit\">Diagnose</button></form></div>"),
+             format("<option value=\"~w\">~w: ~w (label: ~w)</option>", [Id, Id, GL, TL]) )),
+    format("</select> <button type=\"submit\" class=\"btn primary\">Show diagnosis</button></form></div></div>"),
     page_end.
 
 % ---------- diagnosis page (shared by user input and test cases) ----------
@@ -335,7 +348,8 @@ render_diagnosis(Obs, Heading, Sub, EditLink, TrueOpt) :-
     (  catch(compute_diagnosis(Obs, Data), _, fail)
     -> render_data(Data, Heading, Sub, EditLink, TrueOpt)
     ;  page_start('Error'),
-       format("<h1>The diagnosis could not be completed</h1><p>Please check the readings and try again. <a href=\"/\">Back to the form</a></p>"),
+       format("<div class=\"wrap\" style=\"padding-top:36px\"><h1>The diagnosis could not be completed</h1>"),
+       format("<p>Check the readings and try again. <a href=\"/\">Back to the form</a></p></div>"),
        page_end ).
 
 compute_diagnosis(Obs, d(Faults, Info, Expl, Comp, Items, Sus)) :-
@@ -343,12 +357,22 @@ compute_diagnosis(Obs, d(Faults, Info, Expl, Comp, Items, Sus)) :-
     explain(Faults, Info, Expl), competing(Faults, Comp), plan(Faults, Items),
     findall(S, suspect(S), Sus).
 
+obs_of_case(Obs) :- findall(V=X, obs(V, X), Obs).
+
 render_data(d(Faults, Info, Expl, Comp, Items, Sus), Heading, Sub, EditLink, TrueOpt) :-
     Info = info(O, Fired, Res0, Add, _, Res1),
-    obs_of_case(Obs),
-    page_start('Diagnosis'),
-    format("<h1>~w</h1><p class=\"sub\">~w</p>", [Heading, Sub]),
-    summary_section(Faults, TrueOpt, EditLink),
+    obs_of_case(Obs), obs_query(Obs, Q),
+    page_start('Diagnosis report'),
+    format("<section class=\"summary wrap\"><div class=\"verdict\"><h1>~w</h1><p class=\"muted\">~w</p>", [Heading, Sub]),
+    summary_block(Faults, TrueOpt),
+    format("<div class=\"tools\"><a class=\"btn\" href=\"~w\">Change the inputs</a><button type=\"button\" class=\"btn\" id=\"print\">Print report</button></div></div>", [EditLink]),
+    format("<figure class=\"chart-card\"><figcaption>Pressure profile along the network</figcaption>"),
+    format("<div id=\"profile\" class=\"profile\" data-obs=\"~w\"></div><p class=\"chart-note\" id=\"profile-note\"></p></figure></section>", [Q]),
+    format("<div class=\"wrap report\"><nav class=\"toc\" aria-label=\"Report sections\">"),
+    forall(member(N-T, [1-'Readings received', 2-'Engineering checks', 3-'Rules that fired', 4-'Further reasoning',
+                        5-'What was ruled out', 6-'Why this diagnosis', 7-'Maintenance plan']),
+           format("<a href=\"#s~w\">~w &nbsp;~w</a>", [N, N, T])),
+    format("</nav><div>"),
     step_inputs(Obs, Sus),
     step_checks,
     step_rules(Fired),
@@ -356,15 +380,19 @@ render_data(d(Faults, Info, Expl, Comp, Items, Sus), Heading, Sub, EditLink, Tru
     step_ruled_out(O),
     step_explanation(Expl, Comp),
     step_plan(Items),
+    format("</div></div>"),
     page_end.
 
-obs_of_case(Obs) :- findall(V=X, obs(V, X), Obs).
+step_open(N, Title) :-
+    format("<section class=\"step\" id=\"s~w\"><h2><span class=\"num\">~w</span>~w</h2>", [N, N, Title]).
+step_close :- format("</section>").
 
 sensor_html(S, H) :- ( var_html(S, H) -> true ; humanize(S, H) ).
 
-summary_section(Faults, TrueOpt, Edit) :-
-    format("<h2>Diagnosis</h2><div class=\"card\">"),
-    forall(member(F, Faults), ( fault_html(F, H), format("<span class=\"badge\">~w</span>", [H]) )),
+summary_block(Faults, TrueOpt) :-
+    forall(member(F, Faults),
+           ( fault_html(F, H), ( F == fn -> Cls = ' ok' ; Cls = '' ),
+             format("<span class=\"badge~w\">~w</span>", [Cls, H]) )),
     (  TrueOpt = true(True)
     -> msort(True, S1), msort(Faults, S2),
        (  S1 == S2 -> format("<span class=\"badge ok\">Matches the test-case label</span>")
@@ -373,52 +401,65 @@ summary_section(Faults, TrueOpt, Edit) :-
     forall(member(F, Faults),
            (  fault_info(F, M, C, Q)
            -> fault_html(F, FH),
-              format("<p><strong>~w</strong><br>~w<br><span class=\"muted\">Typical causes: ~w.</span><br><span class=\"muted\">Consequences: ~w.</span></p>", [FH, M, C, Q])
-           ;  true )),
-    format("<p><a href=\"~w\">Change the inputs</a></p></div>", [Edit]).
+              format("<div class=\"fault\"><p><strong>~w</strong></p><p>~w</p><p class=\"muted\">Typical causes: ~w.</p><p class=\"muted\">Consequences: ~w.</p></div>", [FH, M, C, Q])
+           ;  true )).
 
 step_inputs(Obs, Sus) :-
-    format("<h2>Step 1 &ndash; Readings received</h2><div class=\"card\"><div class=\"tablewrap\"><table><tr><th>Variable</th><th>Value</th><th>Unit</th></tr>"),
+    step_open(1, 'Readings received'),
+    format("<div class=\"card\"><div class=\"table-scroll\"><table><tr><th>Variable</th><th>Value</th><th>Unit</th></tr>"),
     obs_order(Ord),
     forall(( member(V, Ord), memberchk(V=X, Obs) ),
-           ( var_html(V, VH), var_unit(V, U), format("<tr><td>~w</td><td class=\"num\">~3f</td><td>~w</td></tr>", [VH, X, U]) )),
+           ( var_html(V, VH), var_unit(V, U), format("<tr><td>~w</td><td class=\"value\">~3f</td><td>~w</td></tr>", [VH, X, U]) )),
     format("</table></div>"),
     findall(V, (member(V, Ord), \+ memberchk(V=_, Obs)), Miss),
     (  Miss == [] -> true
-    ;  format("<p class=\"muted\">Not supplied (checks that need them are marked not determined): "),
+    ;  format("<p class=\"muted\">Not supplied. Checks that need these are marked not determined: "),
        forall(member(V, Miss), ( var_html(V, VH), format("<span class=\"chip\">~w</span>", [VH]) )),
        format("</p>") ),
     (  Sus == [] -> true
-    ;  format("<p class=\"warn\"><strong>Possible instrument problem.</strong> Readings from "),
+    ;  format("<p><span class=\"badge warn\">Possible instrument problem</span> Readings from "),
        chips(Sus, sensor_html),
        format(" look implausible or inconsistent and were excluded from the engineering checks.</p>") ),
-    format("</div>").
+    format("</div>"),
+    step_close.
 
 step_checks :-
-    format("<h2>Step 2 &ndash; Engineering checks</h2><div class=\"card tablewrap\"><table>"),
-    format("<tr><th>Check</th><th>How it is calculated</th><th>Value</th><th>Limit</th><th>Result</th></tr>"),
+    step_open(2, 'Engineering checks'),
+    format("<div class=\"card\"><div class=\"table-scroll\"><table>"),
+    format("<tr><th>Check</th><th>How it is calculated</th><th>Value</th><th>Limit</th><th>Against limit</th><th>Result</th></tr>"),
     forall(check_def(_, Label, Formula, VG, TG, Dir, Unit, Abn, Ok),
-           ( format("<tr><td>~w</td><td>~w</td><td class=\"num\">", [Label, Formula]),
-             (  once(catch(call(VG, V), _, fail)) -> format("~3f ~w", [V, Unit]) ; format("<span class=\"muted\">n/a</span>") ),
-             format("</td><td>"),
-             (  once(call(TG, T)) -> limit_text(Dir, T, Unit) ; true ),
-             format("</td><td>"), verdict(Abn, Ok, VG), format("</td></tr>") )),
-    format("</table><p class=\"muted\">Reference values assume a healthy 20 Nm<sup>3</sup>/min station at 7.8 bar(g); pressure-drop references scale with flow squared.</p></div>").
+           check_row(Label, Formula, VG, TG, Dir, Unit, Abn, Ok)),
+    format("</table></div><p class=\"muted\">Reference values assume a healthy 20 Nm<sup>3</sup>/min station at 7.8 bar(g). Pressure-drop references scale with flow squared. The tick on each bar marks the limit.</p></div>"),
+    step_close.
+
+check_row(Label, Formula, VG, TG, Dir, Unit, Abn, Ok) :-
+    check_status(Abn, Ok, VG, S),
+    format("<tr><td>~w</td><td class=\"formula\">~w</td><td class=\"value\">", [Label, Formula]),
+    (  once(catch(call(VG, V), _, fail)) -> format("~3f ~w", [V, Unit]) ; V = none, format("<span class=\"muted\">not available</span>") ),
+    format("</td><td>"),
+    (  once(call(TG, T)) -> limit_text(Dir, T, Unit) ; T = none ),
+    format("</td><td>"), meter(V, T, S), format("</td><td>"), verdict_badge(S), format("</td></tr>").
+
+meter(V, T, S) :-
+    (  number(V), number(T), T =\= 0
+    -> P0 is abs(V)/abs(T)*50, P is min(100, P0),
+       format("<div class=\"meter s-~w\" role=\"img\" aria-label=\"Reading relative to its limit\"><i style=\"width:~1f%\"></i><b></b></div>", [S, P])
+    ;  format("<span class=\"muted\">n/a</span>") ).
 
 limit_text(above, T, U) :- format("above ~3f ~w", [T, U]).
 limit_text(below, T, U) :- format("below ~3f ~w", [T, U]).
 limit_text(band,  T, U) :- format("outside &plusmn;~3f ~w", [T, U]).
 
-verdict(Abn, Ok, VG) :-
-    check_status(Abn, Ok, VG, S),
+verdict_badge(S) :-
     (  S == abnormal -> format("<span class=\"badge bad\">Abnormal</span>")
     ;  S == normal   -> format("<span class=\"badge ok\">Normal</span>")
     ;  format("<span class=\"muted\">Not determined</span>") ).
 
 step_rules(Fired) :-
-    format("<h2>Step 3 &ndash; Diagnostic rules that fired</h2><div class=\"card\">"),
-    (  Fired == [] -> format("<span class=\"muted\">No rule had all of its conditions satisfied by the readings.</span>")
-    ;  format("<div class=\"tablewrap\"><table><tr><th>Rule</th><th>Conclusion</th><th>Conditions satisfied</th><th>Knowledge source</th></tr>"),
+    step_open(3, 'Rules that fired'),
+    format("<div class=\"card\">"),
+    (  Fired == [] -> format("<p class=\"muted\">No rule had all of its conditions satisfied by the readings.</p>")
+    ;  format("<div class=\"table-scroll\"><table><tr><th>Rule</th><th>Conclusion</th><th>Conditions satisfied</th><th>Knowledge source</th></tr>"),
        forall(member(F-R, Fired),
               ( rule(R, F, Conds, Src), basis_html(R, RH), fault_html(F, FH),
                 format("<tr><td>~w</td><td>~w</td><td>", [RH, FH]), chips(Conds, cond_html),
@@ -426,58 +467,66 @@ step_rules(Fired) :-
                 (  source(Src, Desc) -> format("~w", [Desc]) ; format("~w", [Src]) ),
                 format("</td></tr>") )),
        format("</table></div>") ),
-    format("</div>").
+    format("</div>"),
+    step_close.
 
 step_reasoning(O, Res0, Add, Res1) :-
-    format("<h2>Step 4 &ndash; Abductive and consistency-based reasoning</h2><div class=\"card\">"),
+    step_open(4, 'Further reasoning'),
+    format("<div class=\"card\">"),
     format("<p><strong>Abnormal symptoms detected</strong><br>"), chips(O, cond_html),
     format("</p><p><strong>Left unexplained by the rules above</strong><br>"), chips(Res0, cond_html),
-    format("</p><p><strong>Faults added to explain them (smallest unique explanation)</strong><br>"), chips(Add, fault_html),
+    format("</p><p><strong>Faults added by abductive or consistency-based reasoning</strong><br>"), chips(Add, fault_html),
     format("</p><p><strong>Still unexplained afterwards</strong><br>"), chips(Res1, cond_html),
-    format("</p></div>").
+    format("</p></div>"),
+    step_close.
 
 step_ruled_out(O) :-
-    format("<h2>Step 5 &ndash; What was ruled out</h2><div class=\"card\">"),
+    step_open(5, 'What was ruled out'),
+    format("<div class=\"card\">"),
     findall(F-Cs, ( candidate(F), exonerated(F), exonerated_by(F, Cs) ), Ex),
     format("<p><strong>Faults cleared by normal evidence</strong></p>"),
     (  Ex == [] -> format("<p class=\"muted\">None could be cleared with the readings supplied.</p>")
-    ;  format("<div class=\"tablewrap\"><table><tr><th>Fault</th><th>Cleared because</th></tr>"),
+    ;  format("<div class=\"table-scroll\"><table><tr><th>Fault</th><th>Cleared because</th></tr>"),
        forall(member(F-Cs, Ex),
               ( fault_html(F, FH), format("<tr><td>~w</td><td>", [FH]), chips(Cs, cond_html), format("</td></tr>") )),
        format("</table></div>") ),
     format("<p><strong>Faults that could still cause each symptom</strong></p>"),
     (  O == [] -> format("<p class=\"muted\">No abnormal symptoms.</p>")
-    ;  format("<div class=\"tablewrap\"><table><tr><th>Symptom</th><th>Possible causes not yet cleared</th></tr>"),
+    ;  format("<div class=\"table-scroll\"><table><tr><th>Symptom</th><th>Possible causes not yet cleared</th></tr>"),
        forall(member(S, O),
               ( cond_html(S, SH), conflict(S, Set), format("<tr><td>~w</td><td>", [SH]),
-                (  Set == [] -> format("<span class=\"warn\">none &ndash; the evidence is contradictory</span>") ; chips(Set, fault_html) ),
+                (  Set == [] -> format("<span class=\"badge warn\">none: the evidence is contradictory</span>") ; chips(Set, fault_html) ),
                 format("</td></tr>") )),
        format("</table></div>") ),
-    format("</div>").
+    format("</div>"),
+    step_close.
 
 step_explanation(Expl, Comp) :-
-    format("<h2>Step 6 &ndash; Why this diagnosis</h2><div class=\"card tablewrap\"><table>"),
+    step_open(6, 'Why this diagnosis'),
+    format("<div class=\"card\"><div class=\"table-scroll\"><table>"),
     format("<tr><th>Fault</th><th>Supporting evidence</th><th>Basis</th><th>Evidence score</th><th>Contradicting evidence</th></tr>"),
     forall(member(ex(F, Ev, Ba, _, _, CD, Co), Expl),
            ( fault_html(F, FH),
              format("<tr><td>~w</td><td>", [FH]), chips(Ev, cond_html),
              format("</td><td>"), chips(Ba, basis_html),
-             format("</td><td class=\"num\">~3f</td><td>", [CD]), chips(Co, cond_html), format("</td></tr>") )),
-    format("</table><p class=\"muted\">The evidence score ranks hypotheses; it is not a probability.</p>"),
+             format("</td><td class=\"value\">~3f</td><td>", [CD]), chips(Co, cond_html), format("</td></tr>") )),
+    format("</table></div><p class=\"muted\">The evidence score ranks hypotheses. It is not a probability.</p>"),
     format("<p><strong>Other hypotheses considered and not reported</strong><br>"),
     (  Comp == [] -> format("<span class=\"muted\">none</span>")
     ;  forall(member(F-R, Comp),
-              ( fault_html(F, FH), humanize(R, RH), format("<span class=\"chip\">~w &ndash; ~w</span>", [FH, RH]) )) ),
-    format("</p></div>").
+              ( fault_html(F, FH), humanize(R, RH), format("<span class=\"chip\">~w: ~w</span>", [FH, RH]) )) ),
+    format("</p></div>"),
+    step_close.
 
 step_plan(Items) :-
-    format("<h2>Step 7 &ndash; Corrective maintenance plan</h2>"),
-    (  Items == [] -> format("<div class=\"card muted\">No corrective action required, or no plan is available for this diagnosis.</div>")
+    step_open(7, 'Maintenance plan'),
+    (  Items == [] -> format("<div class=\"card muted\">No corrective action is required, or no plan is available for this diagnosis.</div>")
     ;  forall(member(item(P, Fam, Acts, Why), Items),
               ( humanize(Fam, FamH), humanize(P, PH),
-                format("<div class=\"card ~w\"><span class=\"badge\">~w priority</span><strong>~w</strong><ol>", [P, PH, FamH]),
+                format("<div class=\"card plan ~w\"><span class=\"badge\">~w priority</span><strong>~w</strong><ol>", [P, PH, FamH]),
                 forall(member(A, Acts), ( action_html(A, AH), format("<li>~w</li>", [AH]) )),
-                format("</ol><span class=\"muted\">~w</span></div>", [Why]) )) ).
+                format("</ol><span class=\"muted\">~w</span></div>", [Why]) )) ),
+    step_close.
 
 % ---------- entry points used by server.pl ----------
 form_for_request(Request) :- prefill(Request, Pre), form_page(Pre, []).
@@ -487,24 +536,26 @@ diagnose_request(Request) :-
     (  Errors == []
     -> (  Obs == [] -> form_page([], [])
        ;  obs_query(Obs, Q), format(atom(Edit), '/?~w', [Q]),
-          render_diagnosis(Obs, 'Your diagnosis', 'Based on the readings you entered.', Edit, none) )
+          render_diagnosis(Obs, 'Diagnosis report', 'Based on the readings you entered.', Edit, none) )
     ;  form_page(Obs, Errors) ).
 
 render_case(Id) :-
     case(Id, G, _, True, _, _, Obs, _), !,
     glabel(G, GL), format(atom(Edit), '/?example=~w', [Id]),
-    format(atom(Sub), '~w &middot; synthetic test case', [GL]),
-    render_diagnosis(Obs, 'Test case', Sub, Edit, true(True)).
+    format(atom(Head), 'Test case ~w', [Id]),
+    format(atom(Sub), '~w. Synthetic test case.', [GL]),
+    render_diagnosis(Obs, Head, Sub, Edit, true(True)).
 render_case(Id) :-
     esc(Id, E),
     page_start('Case not found'),
-    format("<h1>Case not found</h1><p>No test case called <code>~w</code>. <a href=\"/cases\">Choose one from the list</a>.</p>", [E]),
+    format("<div class=\"wrap\" style=\"padding-top:36px\"><h1>Case not found</h1><p>No test case is called <code>~w</code>. <a href=\"/cases\">Choose one from the list</a>.</p></div>", [E]),
     page_end.
 
 results_page :-
-    page_start('Evaluation report'),
-    format("<h1>Evaluation report</h1><p class=\"sub\">Test split, ablation and sensitivity analysis. Generated live from the Prolog system.</p>"),
+    page_start('Evaluation'),
+    format("<div class=\"wrap\" style=\"padding-top:36px\"><h1>Evaluation report</h1>"),
+    format("<p class=\"lead\">Test split, ablation and sensitivity analysis, generated live from the Prolog system.</p>"),
     with_output_to(string(S), run_all),
     sanitize(S, Clean),
-    format("<pre class=\"report\">~w</pre>", [Clean]),
+    format("<pre class=\"report-text\">~w</pre></div>", [Clean]),
     page_end.

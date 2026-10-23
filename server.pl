@@ -12,12 +12,17 @@
 :- use_module(library(http/http_dispatch)).
 :- [main, web].
 
+% static assets (style.css, app.js) live in ./static next to this file
+:- prolog_load_context(directory, Dir), atom_concat(Dir, '/static', S),
+   asserta(user:file_search_path(krr_static, S)).
+
 :- http_handler(root(.),        home_h,     []).
 :- http_handler(root(diagnose), diagnose_h, []).
 :- http_handler(root(cases),    cases_h,    []).
 :- http_handler(root(demo),     demo_h,     [prefix]).
 :- http_handler(root(results),  results_h,  [time_limit(infinite)]).
 :- http_handler(root(health),   health,     []).
+:- http_handler(root(static),   serve_files_in_directory(krr_static), [prefix]).
 
 % the reasoner keeps per-case state in dynamic predicates, so serialise requests
 safely(Goal) :- catch(with_mutex(krr, Goal), E, (print_message(error, E))).
