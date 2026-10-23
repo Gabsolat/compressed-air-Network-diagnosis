@@ -151,72 +151,312 @@ page_start(Title) :-
     format("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"),
     format("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"),
     format("<title>~w</title><style>~w</style></head><body><main>", [Title, C]),
-    format("<p class=\"muted\"><a href=\"/\">Home</a> &middot; <a href=\"/results\">Evaluation report</a></p>").
+    format("<nav class=\"muted\"><a href=\"/\">Diagnose</a><a href=\"/cases\">Test cases</a><a href=\"/results\">Evaluation report</a></nav>").
 page_end :-
     format("<footer>KRR Mini-Project 31 &ndash; Prolog expert system for compressed-air network fault diagnosis. "),
-    format("All cases are <strong>synthetic</strong> test data, not plant measurements.</footer></main></body></html>~n").
+    format("Decision support only: thresholds are engineering assumptions of this prototype and must be confirmed against your plant standards. "),
+    format("The built-in test cases are <strong>synthetic</strong>.</footer></main></body></html>~n").
 
 chips([], _) :- !, format("<span class=\"muted\">none</span>").
 chips(L, Goal) :- forall(member(X, L), ( call(Goal, X, H), format("<span class=\"chip\">~w</span>", [H]) )).
 
-% ---------- home ----------
-home_page :-
+% ---------- field descriptions for the input form ----------
+var_desc(p_dis,'Compressor discharge pressure').
+var_desc(p_rec,'Receiver pressure (sensor 1)').
+var_desc(p_rec_b,'Receiver pressure from a second, redundant sensor (optional)').
+var_desc(dp_dryer,'Pressure drop across the dryer').
+var_desc(dp_filter,'Pressure drop across the filter').
+var_desc(p_hdr,'Pressure at the far end of the header').
+var_desc(p_set,'Regulator set-point').
+var_desc(p_use,'Pressure at the point of use, after the regulator').
+var_desc(m_in,'Air produced by the compressor (free-air delivery)').
+var_desc(m_use,'Total metered end-use flow').
+var_desc(load,'Fraction of time the compressor is loaded (0 to 1)').
+var_desc(p_sh,'Compressor shaft power').
+var_desc(t_d,'Compressor discharge temperature').
+var_desc(t_amb,'Ambient temperature').
+var_desc(v_rms,'Compressor vibration, RMS velocity').
+var_desc(t_dew,'Dryer outlet pressure dew point').
+var_desc(c_water,'Receiver condensate drain flow').
+var_desc(cyc,'Compressor load/unload cycles per hour').
+var_desc(l_a,'Ultrasonic leak-detector level').
+
+var_hint(p_dis,'7.8'). var_hint(p_rec,'7.7'). var_hint(p_rec_b,'7.7'). var_hint(dp_dryer,'0.20').
+var_hint(dp_filter,'0.15'). var_hint(p_hdr,'7.1'). var_hint(p_set,'6.5'). var_hint(p_use,'6.45').
+var_hint(m_in,'9.8'). var_hint(m_use,'9.0'). var_hint(load,'0.5'). var_hint(p_sh,'62').
+var_hint(t_d,'85'). var_hint(t_amb,'25'). var_hint(v_rms,'2.0'). var_hint(t_dew,'3').
+var_hint(c_water,'1.0'). var_hint(cyc,'12'). var_hint(l_a,'45').
+
+field_group('Compressor and power', [p_dis, m_in, load, p_sh, t_d, t_amb, v_rms]).
+field_group('Receiver', [p_rec, p_rec_b, cyc, c_water]).
+field_group('Air treatment', [dp_dryer, dp_filter, t_dew]).
+field_group('Distribution and point of use', [p_hdr, p_set, p_use, m_use, l_a]).
+
+fault_info(fl, 'Compressed air escapes through leaks in pipes, fittings, couplings or equipment, so the compressor produces more air than the plant uses.',
+    'worn couplings, hoses and seals, loose fittings, failed drain valves, corroded pipework', 'wasted energy, pressure drop, longer compressor running time').
+fault_info(fc, 'The compressor delivers less air, or needs more power per unit of air, than its rating.',
+    'clogged intake filter, worn valves or rings, leaking unloader, control faults, hot intake air', 'pressure cannot be held at high demand, higher energy cost, overheating').
+fault_info(ff, 'The filter element is loaded with dirt or liquid, so the air meets more resistance than it should.',
+    'element past its service life, oil or water carry-over, dirty intake air', 'pressure drop wastes energy and starves downstream users').
+fault_info(fd, 'The dryer is not removing moisture properly (high dew point) or its internal resistance has risen.',
+    'low refrigerant, fouled condenser, failed condensate drain, overload, blocked heat exchanger', 'wet air, corrosion, condensate in the lines, product quality problems').
+fault_info(fr, 'The receiver condensate drain is not working or the effective volume has shrunk, so the compressor cycles too often.',
+    'blocked or failed drain valve, accumulated water', 'short cycling, extra wear, wet air').
+fault_info(ft, 'A section of the distribution line has abnormal flow resistance.',
+    'partly closed valve, blocked or undersized pipe, scale or debris, collapsed hose', 'low pressure at users and an unstable supply').
+fault_info(fv, 'The regulator does not hold its set-point although supply pressure is adequate (or it lets pressure rise above it).',
+    'worn diaphragm or seat, contaminated pilot, drifting spring or set-point', 'over- or under-pressure at the point of use, tool and process problems').
+fault_info(fs, 'One or more instruments give readings that disagree with the rest of the evidence, so the equipment itself may be healthy.',
+    'sensor drift, calibration error, wiring problems, fouled flow meter', 'false alarms, missed faults, wrong maintenance decisions if the reading is trusted').
+fault_info(fp, 'Pressure is low but the readings supplied do not show which component is responsible.',
+    'not isolated with the data available', 'unresolved pressure loss; supply more measurements').
+fault_info(fn, 'No abnormal condition is evident from the readings supplied.', 'none', 'none').
+fault_info(undetermined, 'The readings do not point to a single explanation; several faults remain possible.',
+    'insufficient or ambiguous evidence', 'supply more measurements to narrow the diagnosis').
+
+% ---------- engineering checks shown in the walkthrough ----------
+% check_def(Id, Label, Formula, ValueGoal, ThresholdGoal, Direction, Unit, AbnormalCond, NormalCond)
+check_def(leak, 'Leakage fraction &lambda;<sub>L</sub>',
+    '(m&#775;<sub>in</sub> &minus; m&#775;<sub>use</sub>) / m&#775;<sub>in</sub>', leak_fraction, leak_thr, above, '', leak_fraction_high, leak_fraction_ok).
+check_def(ultra, 'Ultrasonic level L<sub>a</sub>', 'measured', v_ultra, ultra_thr, above, 'dB', ultrasonic_high, ultrasonic_ok).
+check_def(cap, 'Compressor capacity deficit',
+    '(FAD<sub>rated</sub> &minus; m&#775;<sub>in</sub> / load) / FAD<sub>rated</sub>', cap_deficit, cap_thr, above, '', capacity_deficit, capacity_ok).
+check_def(spw, 'Specific power ratio',
+    '(P<sub>sh</sub> / m&#775;<sub>in</sub>) / reference', spec_power_ratio, spw_thr, above, '', spec_power_high, none).
+check_def(tdis, 'Discharge temperature rise',
+    'T<sub>d</sub> &minus; (85 + T<sub>amb</sub> &minus; 25)', t_rise, td_thr, above, '&deg;C', disch_temp_high, none).
+check_def(vib, 'Vibration V<sub>RMS</sub>', 'measured', v_vib, vib_thr, above, 'mm/s', vibration_high, none).
+check_def(cyc, 'Load/unload cycles', 'measured', v_cyc, cyc_thr, above, 'h<sup>&minus;1</sup>', cycling_high, cycling_ok).
+check_def(drain, 'Receiver drain flow', 'measured', v_drain, drain_thr, below, 'L/h', drain_low, drain_ok).
+check_def(filt, 'Filter restriction index I<sub>F</sub>',
+    '&Delta;P<sub>filter</sub> / (reference &times; (m&#775;<sub>in</sub>/12)<sup>2</sup>)', v_filt, filt_thr, above, '', filter_dp_high, filter_ok).
+check_def(dry, 'Dryer &Delta;P ratio',
+    '&Delta;P<sub>dryer</sub> / (reference &times; (m&#775;<sub>in</sub>/12)<sup>2</sup>)', v_dry, dry_thr, above, '', dryer_dp_high, dryer_dp_ok).
+check_def(dew, 'Dew-point deviation',
+    'T<sub>dew</sub> &minus; 3 &deg;C', dew_dev, dew_thr, above, '&deg;C', dewpoint_high, dewpoint_ok).
+check_def(hdr, 'Header &Delta;P ratio &Lambda;<sub>P</sub>',
+    '(P<sub>rec</sub> &minus; &Delta;P<sub>dryer</sub> &minus; &Delta;P<sub>filter</sub> &minus; P<sub>hdr</sub>) / (reference &times; (m&#775;<sub>in</sub>/12)<sup>2</sup>)',
+    v_hdr, hdr_thr, above, '', header_dp_high, header_ok).
+check_def(reg, 'Regulator error P<sub>set</sub> &minus; P<sub>use</sub>',
+    'P<sub>set</sub> &minus; P<sub>use</sub>', v_reg, reg_thr, band, 'bar', reg_error, reg_ok).
+check_def(prd, 'Receiver sensor disagreement',
+    '|P<sub>rec</sub> &minus; P<sub>rec,b</sub>|', v_prd, prd_thr, above, 'bar', prec_disagree, none).
+
+v_ultra(V) :- val(l_a, V).        v_vib(V) :- val(v_rms, V).
+v_cyc(V) :- val(cyc, V).          v_drain(V) :- val(c_water, V).
+v_filt(V) :- dp_ratio(filter, V). v_dry(V) :- dp_ratio(dryer, V).
+v_hdr(V) :- dp_ratio(header, V).  v_reg(V) :- val(p_set, S), val(p_use, U), V is S - U.
+v_prd(V) :- obs(p_rec, A), obs(p_rec_b, B), V is abs(A - B).
+leak_thr(T) :- thr(leak_frac_high, T).     ultra_thr(T) :- thr(ultrasonic_high_db, T).
+cap_thr(T) :- thr(capacity_deficit, T).    spw_thr(T) :- thr(spec_power_ratio_high, T).
+td_thr(T) :- thr(disch_temp_rise_high, T). vib_thr(T) :- thr(vib_high_mm_s, T).
+cyc_thr(T) :- ref(cycles, R), thr(cycle_ratio_high, T0), T is R*T0.
+drain_thr(T) :- ref(drain, R), thr(drain_ratio_low, T0), T is R*T0.
+filt_thr(T) :- thr(filter_ratio_high, T). dry_thr(T) :- thr(dryer_dp_ratio_high, T).
+dew_thr(T) :- thr(dewpoint_dev_high, T).  hdr_thr(T) :- thr(header_ratio_high, T).
+reg_thr(T) :- thr(reg_error_bar, T).      prd_thr(T) :- thr(redundancy_tol_bar, T).
+
+check_status(Abn, Ok, VG, S) :-
+    (  once(holds(Abn)) -> S = abnormal
+    ;  Ok == none -> ( once(catch(call(VG, _), _, fail)) -> S = normal ; S = unknown )
+    ;  once(holds(Ok)) -> S = normal
+    ;  S = unknown ).
+
+% ---------- input parsing ----------
+temp_var(t_d). temp_var(t_amb). temp_var(t_dew).
+valid_value(load, N) :- !, N >= 0, N =< 1.05.
+valid_value(V, N) :- ( temp_var(V) -> true ; N >= 0 ).
+
+parse_inputs(Request, Obs, Errors) :-
+    (  memberchk(search(S), Request) -> true ; S = [] ),
+    obs_order(Ord),
+    findall(R, ( member(V, Ord), member(V=Raw, S), Raw \== '', input_item(V, Raw, R) ), Items),
+    findall(V=N, member(ok(V=N), Items), Obs),
+    findall(Msg, ( member(bad(V), Items), var_html(V, H),
+                   format(atom(Msg), 'The value for ~w is not a valid number or is out of range.', [H]) ), Errors0),
+    (  Obs == [], Errors0 == [], S \== [] -> Errors = ['No readings were entered. Please fill in at least two fields.']
+    ;  Errors0 == [], Obs \== [], \+ Obs = [_,_|_] -> Errors = ['Please enter at least two readings so the checks have something to compare.']
+    ;  Errors = Errors0 ).
+input_item(V, Raw, R) :-
+    (  atom_number(Raw, N), valid_value(V, N) -> R = ok(V=N) ; R = bad(V) ).
+
+obs_query(Obs, Q) :-
+    findall(P, ( member(V=X, Obs), format(atom(P), '~w=~4f', [V, X]) ), Ps),
+    atomic_list_concat(Ps, '&', Q).
+
+prefill(Request, Pre) :-
+    (  memberchk(search(S), Request), memberchk(example=Id, S), case(Id, _, _, _, _, _, Obs, _)
+    -> Pre = Obs
+    ;  parse_inputs(Request, Pre0, _), Pre = Pre0 ).
+
+% ---------- form page ----------
+form_page(Pre, Errors) :-
     page_start('Compressed-air network diagnosis'),
-    format("<h1>Compressed-air network fault diagnosis</h1>"),
-    format("<p class=\"sub\">Explainable Prolog expert system: deductive, abductive and consistency-based reasoning with corrective-maintenance planning.</p>"),
-    format("<div class=\"card\"><form action=\"/demo\" method=\"get\"><label for=\"id\"><strong>Choose a test case</strong></label><br><br>"),
-    format("<select name=\"id\" id=\"id\">"),
+    format("<div class=\"hero\"><h1>Compressed-Air Network Fault Diagnosis</h1>"),
+    format("<p class=\"lead\">Enter the readings you have from your compressor station and distribution network. "),
+    format("The expert system checks them against engineering rules, explains every step of its reasoning, and recommends corrective maintenance. "),
+    format("It looks for leaks, filter and dryer problems, compressor and regulator faults, receiver and line restrictions, and faulty instruments.</p>"),
+    format("<p class=\"muted\">Leave a field blank if you have no measurement and never guess one. More readings give a more specific diagnosis.</p></div>"),
+    forall(member(E, Errors), format("<div class=\"card err\">~w</div>", [E])),
+    format("<form action=\"/diagnose\" method=\"get\">"),
+    forall(field_group(Title, Vars),
+           ( format("<h2>~w</h2><div class=\"card grid\">", [Title]),
+             forall(member(V, Vars), field_html(V, Pre)),
+             format("</div>") )),
+    format("<p><button type=\"submit\">Diagnose</button> &nbsp; <a href=\"/\">Clear the form</a></p></form>"),
+    format("<h2>Try an example</h2><div class=\"card\"><p class=\"muted\">Fills the form with a built-in synthetic case, then press Diagnose.</p>"),
+    forall(( member(G, [a_normal,b_leak,c_comp,d_filter,d_dryer,e_header,x_receiver,x_regulator,x_sensor,f_multi]),
+             once(case(Id, G, _, _, _, _, _, _)) ),
+           ( glabel(G, GL), format("<a class=\"chip pill\" href=\"/?example=~w\">~w</a>", [Id, GL]) )),
+    format("</div>"),
+    page_end.
+
+field_html(V, Pre) :-
+    var_html(V, H), var_unit(V, U), var_hint(V, Hint), var_desc(V, D),
+    (  memberchk(V=X, Pre) -> format(atom(Val), '~4f', [X]) ; Val = '' ),
+    format("<label class=\"field\"><span>~w <span class=\"muted\">(~w)</span></span>", [H, U]),
+    format("<input type=\"number\" step=\"any\" name=\"~w\" value=\"~w\" placeholder=\"e.g. ~w\">", [V, Val, Hint]),
+    format("<small class=\"muted\">~w</small></label>", [D]).
+
+% ---------- list of built-in test cases ----------
+cases_page :-
+    page_start('Test cases'),
+    format("<h1>Built-in test cases</h1><p class=\"sub\">Synthetic cases used to evaluate the system. Choose one to see the full diagnosis.</p>"),
+    format("<div class=\"card\"><form action=\"/demo\" method=\"get\"><select name=\"id\">"),
     forall(case(Id, G, _, True, _, _, _, _),
            ( glabel(G, GL), findall(P, (member(F, True), fault_plain(F, P)), Ps),
              atomic_list_concat(Ps, ' + ', TL),
-             format("<option value=\"~w\">~w &middot; ~w &middot; true: ~w</option>", [Id, Id, GL, TL]) )),
+             format("<option value=\"~w\">~w &middot; ~w &middot; label: ~w</option>", [Id, Id, GL, TL]) )),
     format("</select> <button type=\"submit\">Diagnose</button></form></div>"),
-    format("<div class=\"card\"><strong>Evaluation report</strong><br>Runs the full evaluation: test split, ablation, sensitivity. "),
-    format("<a href=\"/results\">Open the report</a></div>"),
     page_end.
 
-% ---------- one case ----------
-render_case(Id) :-
-    case(Id, G, _, True, Sev, _, Obs, _), !,
+% ---------- diagnosis page (shared by user input and test cases) ----------
+render_diagnosis(Obs, Heading, Sub, EditLink, TrueOpt) :-
+    (  catch(compute_diagnosis(Obs, Data), _, fail)
+    -> render_data(Data, Heading, Sub, EditLink, TrueOpt)
+    ;  page_start('Error'),
+       format("<h1>The diagnosis could not be completed</h1><p>Please check the readings and try again. <a href=\"/\">Back to the form</a></p>"),
+       page_end ).
+
+compute_diagnosis(Obs, d(Faults, Info, Expl, Comp, Items, Sus)) :-
     diagnose(Obs, result(Faults, Info)),
-    Info = info(O, _, Res0, Add, Method, Res1),
     explain(Faults, Info, Expl), competing(Faults, Comp), plan(Faults, Items),
-    findall(N-V, indicator(N, V), Ind),
-    esc(Id, EId), glabel(G, GL),
-    atom_string(SevA, Sev), humanize_sev(SevA, SevH),
+    findall(S, suspect(S), Sus).
+
+render_data(d(Faults, Info, Expl, Comp, Items, Sus), Heading, Sub, EditLink, TrueOpt) :-
+    Info = info(O, Fired, Res0, Add, _, Res1),
+    obs_of_case(Obs),
     page_start('Diagnosis'),
-    format("<h1>Case ~w</h1><p class=\"sub\">~w &middot; synthetic test case &middot; severity note: ~w</p>", [EId, GL, SevH]),
+    format("<h1>~w</h1><p class=\"sub\">~w</p>", [Heading, Sub]),
+    summary_section(Faults, TrueOpt, EditLink),
+    step_inputs(Obs, Sus),
+    step_checks,
+    step_rules(Fired),
+    step_reasoning(O, Res0, Add, Res1),
+    step_ruled_out(O),
+    step_explanation(Expl, Comp),
+    step_plan(Items),
+    page_end.
+
+obs_of_case(Obs) :- findall(V=X, obs(V, X), Obs).
+
+sensor_html(S, H) :- ( var_html(S, H) -> true ; humanize(S, H) ).
+
+summary_section(Faults, TrueOpt, Edit) :-
     format("<h2>Diagnosis</h2><div class=\"card\">"),
     forall(member(F, Faults), ( fault_html(F, H), format("<span class=\"badge\">~w</span>", [H]) )),
-    msort(True, S1), msort(Faults, S2),
-    (  S1 == S2 -> format("<span class=\"badge ok\">Matches the case label</span>")
-    ;  format("<span class=\"badge bad\">Differs from the case label</span>"),
-       format("<br><span class=\"muted\">Case label: </span>"),
-       forall(member(F, True), ( fault_html(F, H), format("<span class=\"chip\">~w</span>", [H]) )) ),
-    format("</div>"),
-    format("<h2>Observations</h2><div class=\"card tablewrap\"><table><tr><th>Variable</th><th>Value</th><th>Unit</th></tr>"),
+    (  TrueOpt = true(True)
+    -> msort(True, S1), msort(Faults, S2),
+       (  S1 == S2 -> format("<span class=\"badge ok\">Matches the test-case label</span>")
+       ;  format("<span class=\"badge bad\">Differs from the test-case label</span>") )
+    ;  true ),
+    forall(member(F, Faults),
+           (  fault_info(F, M, C, Q)
+           -> fault_html(F, FH),
+              format("<p><strong>~w</strong><br>~w<br><span class=\"muted\">Typical causes: ~w.</span><br><span class=\"muted\">Consequences: ~w.</span></p>", [FH, M, C, Q])
+           ;  true )),
+    format("<p><a href=\"~w\">Change the inputs</a></p></div>", [Edit]).
+
+step_inputs(Obs, Sus) :-
+    format("<h2>Step 1 &ndash; Readings received</h2><div class=\"card\"><div class=\"tablewrap\"><table><tr><th>Variable</th><th>Value</th><th>Unit</th></tr>"),
     obs_order(Ord),
     forall(( member(V, Ord), memberchk(V=X, Obs) ),
            ( var_html(V, VH), var_unit(V, U), format("<tr><td>~w</td><td class=\"num\">~3f</td><td>~w</td></tr>", [VH, X, U]) )),
-    format("</table>"),
+    format("</table></div>"),
     findall(V, (member(V, Ord), \+ memberchk(V=_, Obs)), Miss),
     (  Miss == [] -> true
-    ;  format("<p class=\"muted\">Not available in this case: "),
+    ;  format("<p class=\"muted\">Not supplied (checks that need them are marked not determined): "),
        forall(member(V, Miss), ( var_html(V, VH), format("<span class=\"chip\">~w</span>", [VH]) )),
        format("</p>") ),
-    format("</div>"),
-    format("<h2>Reasoning</h2><div class=\"card\"><p><strong>Abnormal symptoms detected</strong><br>"),
-    chips(O, cond_html),
-    format("</p><div class=\"tablewrap\"><table><tr><th>Derived indicator</th><th>Value</th></tr>"),
-    forall(member(N-V, Ind),
-           ( indicator_html(N, NH), format("<tr><td>~w</td><td class=\"num\">~3f</td></tr>", [NH, V]) )),
-    format("</table></div>"),
-    format("<p><strong>Left unexplained by the deductive rules</strong><br>"), chips(Res0, cond_html),
-    format("</p><p><strong>Added by abductive or consistency-based reasoning</strong><br>"),
-    chips(Add, fault_html),
-    format("</p><p><strong>Still unexplained</strong><br>"), chips(Res1, cond_html),
-    format("</p></div>"),
-    format("<h2>Why this diagnosis</h2><div class=\"card tablewrap\"><table>"),
+    (  Sus == [] -> true
+    ;  format("<p class=\"warn\"><strong>Possible instrument problem.</strong> Readings from "),
+       chips(Sus, sensor_html),
+       format(" look implausible or inconsistent and were excluded from the engineering checks.</p>") ),
+    format("</div>").
+
+step_checks :-
+    format("<h2>Step 2 &ndash; Engineering checks</h2><div class=\"card tablewrap\"><table>"),
+    format("<tr><th>Check</th><th>How it is calculated</th><th>Value</th><th>Limit</th><th>Result</th></tr>"),
+    forall(check_def(_, Label, Formula, VG, TG, Dir, Unit, Abn, Ok),
+           ( format("<tr><td>~w</td><td>~w</td><td class=\"num\">", [Label, Formula]),
+             (  once(catch(call(VG, V), _, fail)) -> format("~3f ~w", [V, Unit]) ; format("<span class=\"muted\">n/a</span>") ),
+             format("</td><td>"),
+             (  once(call(TG, T)) -> limit_text(Dir, T, Unit) ; true ),
+             format("</td><td>"), verdict(Abn, Ok, VG), format("</td></tr>") )),
+    format("</table><p class=\"muted\">Reference values assume a healthy 20 Nm<sup>3</sup>/min station at 7.8 bar(g); pressure-drop references scale with flow squared.</p></div>").
+
+limit_text(above, T, U) :- format("above ~3f ~w", [T, U]).
+limit_text(below, T, U) :- format("below ~3f ~w", [T, U]).
+limit_text(band,  T, U) :- format("outside &plusmn;~3f ~w", [T, U]).
+
+verdict(Abn, Ok, VG) :-
+    check_status(Abn, Ok, VG, S),
+    (  S == abnormal -> format("<span class=\"badge bad\">Abnormal</span>")
+    ;  S == normal   -> format("<span class=\"badge ok\">Normal</span>")
+    ;  format("<span class=\"muted\">Not determined</span>") ).
+
+step_rules(Fired) :-
+    format("<h2>Step 3 &ndash; Diagnostic rules that fired</h2><div class=\"card\">"),
+    (  Fired == [] -> format("<span class=\"muted\">No rule had all of its conditions satisfied by the readings.</span>")
+    ;  format("<div class=\"tablewrap\"><table><tr><th>Rule</th><th>Conclusion</th><th>Conditions satisfied</th><th>Knowledge source</th></tr>"),
+       forall(member(F-R, Fired),
+              ( rule(R, F, Conds, Src), basis_html(R, RH), fault_html(F, FH),
+                format("<tr><td>~w</td><td>~w</td><td>", [RH, FH]), chips(Conds, cond_html),
+                format("</td><td>"),
+                (  source(Src, Desc) -> format("~w", [Desc]) ; format("~w", [Src]) ),
+                format("</td></tr>") )),
+       format("</table></div>") ),
+    format("</div>").
+
+step_reasoning(O, Res0, Add, Res1) :-
+    format("<h2>Step 4 &ndash; Abductive and consistency-based reasoning</h2><div class=\"card\">"),
+    format("<p><strong>Abnormal symptoms detected</strong><br>"), chips(O, cond_html),
+    format("</p><p><strong>Left unexplained by the rules above</strong><br>"), chips(Res0, cond_html),
+    format("</p><p><strong>Faults added to explain them (smallest unique explanation)</strong><br>"), chips(Add, fault_html),
+    format("</p><p><strong>Still unexplained afterwards</strong><br>"), chips(Res1, cond_html),
+    format("</p></div>").
+
+step_ruled_out(O) :-
+    format("<h2>Step 5 &ndash; What was ruled out</h2><div class=\"card\">"),
+    findall(F-Cs, ( candidate(F), exonerated(F), exonerated_by(F, Cs) ), Ex),
+    format("<p><strong>Faults cleared by normal evidence</strong></p>"),
+    (  Ex == [] -> format("<p class=\"muted\">None could be cleared with the readings supplied.</p>")
+    ;  format("<div class=\"tablewrap\"><table><tr><th>Fault</th><th>Cleared because</th></tr>"),
+       forall(member(F-Cs, Ex),
+              ( fault_html(F, FH), format("<tr><td>~w</td><td>", [FH]), chips(Cs, cond_html), format("</td></tr>") )),
+       format("</table></div>") ),
+    format("<p><strong>Faults that could still cause each symptom</strong></p>"),
+    (  O == [] -> format("<p class=\"muted\">No abnormal symptoms.</p>")
+    ;  format("<div class=\"tablewrap\"><table><tr><th>Symptom</th><th>Possible causes not yet cleared</th></tr>"),
+       forall(member(S, O),
+              ( cond_html(S, SH), conflict(S, Set), format("<tr><td>~w</td><td>", [SH]),
+                (  Set == [] -> format("<span class=\"warn\">none &ndash; the evidence is contradictory</span>") ; chips(Set, fault_html) ),
+                format("</td></tr>") )),
+       format("</table></div>") ),
+    format("</div>").
+
+step_explanation(Expl, Comp) :-
+    format("<h2>Step 6 &ndash; Why this diagnosis</h2><div class=\"card tablewrap\"><table>"),
     format("<tr><th>Fault</th><th>Supporting evidence</th><th>Basis</th><th>Evidence score</th><th>Contradicting evidence</th></tr>"),
     forall(member(ex(F, Ev, Ba, _, _, CD, Co), Expl),
            ( fault_html(F, FH),
@@ -224,28 +464,43 @@ render_case(Id) :-
              format("</td><td>"), chips(Ba, basis_html),
              format("</td><td class=\"num\">~3f</td><td>", [CD]), chips(Co, cond_html), format("</td></tr>") )),
     format("</table><p class=\"muted\">The evidence score ranks hypotheses; it is not a probability.</p>"),
-    format("<p><strong>Competing hypotheses considered and not reported</strong><br>"),
+    format("<p><strong>Other hypotheses considered and not reported</strong><br>"),
     (  Comp == [] -> format("<span class=\"muted\">none</span>")
     ;  forall(member(F-R, Comp),
               ( fault_html(F, FH), humanize(R, RH), format("<span class=\"chip\">~w &ndash; ~w</span>", [FH, RH]) )) ),
-    format("</p></div>"),
-    format("<h2>Corrective maintenance plan</h2>"),
-    (  Items == [] -> format("<div class=\"card muted\">No corrective action required or no plan available.</div>")
+    format("</p></div>").
+
+step_plan(Items) :-
+    format("<h2>Step 7 &ndash; Corrective maintenance plan</h2>"),
+    (  Items == [] -> format("<div class=\"card muted\">No corrective action required, or no plan is available for this diagnosis.</div>")
     ;  forall(member(item(P, Fam, Acts, Why), Items),
               ( humanize(Fam, FamH), humanize(P, PH),
                 format("<div class=\"card ~w\"><span class=\"badge\">~w priority</span><strong>~w</strong><ol>", [P, PH, FamH]),
                 forall(member(A, Acts), ( action_html(A, AH), format("<li>~w</li>", [AH]) )),
-                format("</ol><span class=\"muted\">~w</span></div>", [Why]) )) ),
-    page_end.
+                format("</ol><span class=\"muted\">~w</span></div>", [Why]) )) ).
+
+% ---------- entry points used by server.pl ----------
+form_for_request(Request) :- prefill(Request, Pre), form_page(Pre, []).
+
+diagnose_request(Request) :-
+    parse_inputs(Request, Obs, Errors),
+    (  Errors == []
+    -> (  Obs == [] -> form_page([], [])
+       ;  obs_query(Obs, Q), format(atom(Edit), '/?~w', [Q]),
+          render_diagnosis(Obs, 'Your diagnosis', 'Based on the readings you entered.', Edit, none) )
+    ;  form_page(Obs, Errors) ).
+
+render_case(Id) :-
+    case(Id, G, _, True, _, _, Obs, _), !,
+    glabel(G, GL), format(atom(Edit), '/?example=~w', [Id]),
+    format(atom(Sub), '~w &middot; synthetic test case', [GL]),
+    render_diagnosis(Obs, 'Test case', Sub, Edit, true(True)).
 render_case(Id) :-
     esc(Id, E),
     page_start('Case not found'),
-    format("<h1>Case not found</h1><p>No test case called <code>~w</code>. <a href=\"/\">Choose one from the list</a>.</p>", [E]),
+    format("<h1>Case not found</h1><p>No test case called <code>~w</code>. <a href=\"/cases\">Choose one from the list</a>.</p>", [E]),
     page_end.
 
-humanize_sev(S, H) :- esc(S, E0), replace_all(E0, '_', ' ', H).
-
-% ---------- evaluation report ----------
 results_page :-
     page_start('Evaluation report'),
     format("<h1>Evaluation report</h1><p class=\"sub\">Test split, ablation and sensitivity analysis. Generated live from the Prolog system.</p>"),

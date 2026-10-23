@@ -1,28 +1,36 @@
 % =====================================================================
 % server.pl -- HTTP interface for deployment (Render). Reasoning stays in
 % Prolog; pages are rendered by web.pl.
-%   GET /            home page with case selector
-%   GET /health      health check
+%   GET /            input form (optionally prefilled)
+%   GET /diagnose    diagnosis of the readings submitted from the form
+%   GET /cases       list of built-in test cases
+%   GET /demo?id=c001  (or /demo/c001)  diagnosis of one test case
 %   GET /results     full evaluation report
-%   GET /demo?id=c001  (or /demo/c001)  diagnosis page for one case
+%   GET /health      health check
 % =====================================================================
 :- use_module(library(http/thread_httpd)).
 :- use_module(library(http/http_dispatch)).
 :- [main, web].
 
-:- http_handler(root(.),       home_h,    []).
-:- http_handler(root(health),  health,    []).
-:- http_handler(root(results), results_h, [time_limit(infinite)]).
-:- http_handler(root(demo),    demo_h,    [prefix]).
-
-home_h(_)    :- with_mutex(krr, home_page).
-health(_)    :- format("Content-Type: text/plain~n~nok~n").
-results_h(_) :- catch(with_mutex(krr, results_page), E, (print_message(error, E))).
+:- http_handler(root(.),        home_h,     []).
+:- http_handler(root(diagnose), diagnose_h, []).
+:- http_handler(root(cases),    cases_h,    []).
+:- http_handler(root(demo),     demo_h,     [prefix]).
+:- http_handler(root(results),  results_h,  [time_limit(infinite)]).
+:- http_handler(root(health),   health,     []).
 
 % the reasoner keeps per-case state in dynamic predicates, so serialise requests
+safely(Goal) :- catch(with_mutex(krr, Goal), E, (print_message(error, E))).
+
+home_h(Request)     :- safely(form_for_request(Request)).
+diagnose_h(Request) :- safely(diagnose_request(Request)).
+cases_h(_)          :- safely(cases_page).
+results_h(_)        :- safely(results_page).
+health(_)           :- format("Content-Type: text/plain~n~nok~n").
+
 demo_h(Request) :-
     (  request_id(Request, Id) -> true ; Id = none ),
-    catch(with_mutex(krr, render_case(Id)), E, (print_message(error, E))).
+    safely(render_case(Id)).
 
 request_id(Request, Id) :- memberchk(search(S), Request), memberchk(id=Id0, S), Id0 \== '', !, atom_string(Id, Id0).
 request_id(Request, Id) :- memberchk(path_info(PI), Request), sub_atom(PI, 1, _, 0, Id0), Id0 \== '', !, atom_string(Id, Id0).

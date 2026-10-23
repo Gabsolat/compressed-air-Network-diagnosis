@@ -1,7 +1,7 @@
 # KRR Mini-Project 31 - Prolog expert system (Render web service)
 # Pin the tag once you know your local version (`swipl --version`), e.g. swipl:9.2.9,
 # so the deployed environment matches what you report in the reproducibility section.
-FROM swipl:10.0.0
+FROM swipl:stable
 
 WORKDIR /app
 COPY . /app
