@@ -120,6 +120,21 @@ esc(In, Out) :-
 % report text: escape, then replace underscores by spaces (same length keeps columns aligned)
 sanitize(In, Out) :- esc(In, E), replace_all(E, '_', ' ', Out).
 
+% ---------- embedded assets (CSS and JavaScript are inlined into each page) ----------
+:- dynamic static_dir/1.
+:- prolog_load_context(directory, D), atom_concat(D, '/static', S), assertz(static_dir(S)).
+
+asset_path(Name, Path) :- static_dir(Dir), atomic_list_concat([Dir, '/', Name], Path).
+emit_asset(Name) :-
+    asset_path(Name, Path),
+    (  catch(read_file_to_string(Path, Str, [encoding(utf8)]), _, fail)
+    -> format("~w", [Str])
+    ;  format("/* missing asset: ~w */", [Path]) ).
+asset_warning :-
+    asset_path('style.css', P),
+    (  exists_file(P) -> true
+    ;  format("<div style=\"background:#fde8e6;color:#7a1810;padding:12px 20px;border-bottom:2px solid #b3261e\">The style files were not found. Expected <code>~w</code>. Copy the <strong>static</strong> folder (style.css and app.js) next to server.pl and restart.</div>", [P]) ).
+
 % ---------- page template ----------
 page_start(Title) :-
     format("Content-Type: text/html; charset=UTF-8~n~n"),
@@ -127,16 +142,17 @@ page_start(Title) :-
     format("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"),
     format("<title>~w | Compressed-air diagnosis</title>", [Title]),
     format("<script>(function(){try{var t=localStorage.getItem('krr-theme');if(!t){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t}catch(e){}})();</script>"),
-    format("<link rel=\"stylesheet\" href=\"/static/style.css\"><script defer src=\"/static/app.js\"></script></head><body>"),
+    format("<style>"), emit_asset('style.css'), format("</style></head><body>"),
     format("<header class=\"site\"><div class=\"wrap bar\"><a class=\"brand\" href=\"/\">"),
     format("<svg class=\"mark\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M3.5 17a8.5 8.5 0 0 1 17 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><path d=\"M12 17l4.2-5.4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><circle cx=\"12\" cy=\"17\" r=\"1.8\" fill=\"currentColor\"/></svg>"),
     format("<span>Compressed-air diagnosis</span></a>"),
     format("<nav aria-label=\"Main\"><a href=\"/\">Diagnose</a><a href=\"/cases\">Test cases</a><a href=\"/results\">Evaluation</a></nav>"),
-    format("<button type=\"button\" id=\"theme-toggle\" class=\"btn ghost\">Dark mode</button></div></header><main id=\"main\">").
+    format("<button type=\"button\" id=\"theme-toggle\" class=\"btn ghost\">Dark mode</button></div></header><main id=\"main\">"),
+    asset_warning.
 page_end :-
     format("</main><footer class=\"site-foot\"><div class=\"wrap\">"),
     format("Decision support only. The limits used here are engineering assumptions of this prototype and must be confirmed against your plant standards. The built-in test cases are synthetic."),
-    format("</div></footer></body></html>~n").
+    format("</div></footer><script>"), emit_asset('app.js'), format("</script></body></html>~n").
 
 chips([], _) :- !, format("<span class=\"muted\">none</span>").
 chips(L, Goal) :- forall(member(X, L), ( call(Goal, X, H), format("<span class=\"chip\">~w</span>", [H]) )).

@@ -106,7 +106,7 @@ Files: `Dockerfile`, `server.pl` (HTTP routes), `web.pl` (HTML pages), `static/`
    `/cases` (built-in test cases), `/demo?id=c001`, `/results` (evaluation report), `/health`.
    The report has a pressure-profile chart, a section index and seven numbered steps: readings received (and any sensor judged implausible), engineering checks (formula, value, limit, bar against limit, result),
    rules that fired with their knowledge source, abductive and consistency-based reasoning, what was ruled out, the evidence table with rejected hypotheses, and a prioritised maintenance plan.
-   Design: `static/style.css` and `static/app.js` (no external libraries or fonts; light and dark themes; print stylesheet). `web.pl` maps every internal atom to readable text with true subscripts, so underscores never appear in the web app.
+   Design: `static/style.css` and `static/app.js`, which `web.pl` embeds directly into every page, so no separate file route is needed (no external libraries or fonts; light and dark themes; print stylesheet). `web.pl` maps every internal atom to readable text with true subscripts, so underscores never appear in the web app.
    The terminal output of `main.pl` still shows raw atom names.
 Local test: `docker build -t krr31 . && docker run -p 10000:10000 krr31`, then open `http://localhost:10000/results`.
 Notes: free-tier services sleep when idle, and `/results` runs the whole evaluation, so the first call can be slow. The Dockerfile uses `swipl:stable`; pin an exact tag
