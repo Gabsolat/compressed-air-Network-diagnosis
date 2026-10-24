@@ -109,5 +109,37 @@ print_diagnosis(Obs) :-
         format("  ~w: evidence=~w basis=~w E_norm=~3f Cr=~3f score=~3f contra=~w~n",
                [F, Ev, Ba, Eb, Cr, CD, Co])),
     format("Competing / rejected       : ~w~n", [Comp]),
+    next_questions(Faults, Qs),
+    forall(member(Need-Whys, Qs), format("ASK FOR ~w (rules ~w)~n", [Need, Whys])),
     forall(member(item(P, Fam, Acts, Why), Items),
         format("PLAN [~w] ~w: ~w~n    why: ~w~n", [P, Fam, Acts, Why])).
+
+% ---------------- consultation: what the system would ask for next ----------------
+% A condition is true (holds), unknown (a needed measurement is missing) or false.
+cond_status(C, true)    :- once(holds(C)), !.
+cond_status(C, unknown) :- missing_for(C, M), M \== [], !.
+cond_status(_, false).
+
+missing_for(C, Missing) :-
+    (  cond_needs(C, Needs) -> true ; Needs = [] ),
+    findall(N, (member(N, Needs), \+ need_met(N)), Missing).
+need_met(any(L)) :- !, member(V, L), val(V, _), !.
+need_met(V) :- val(V, _).
+
+% a rule is open when no condition is refuted and at least one is still unknown
+open_rule(Faults, R-F, Unknown) :-
+    rule(R, F, Conds, _), \+ memberchk(F, Faults),
+    \+ once(all_hold(Conds)),
+    findall(C-S, (member(C, Conds), cond_status(C, S)), St),
+    \+ memberchk(_-false, St),
+    findall(C, member(C-unknown, St), Unknown), Unknown \== [],
+    (  memberchk(_-true, St) -> true ; weak_diagnosis(Faults) ).
+
+weak_diagnosis(Faults) :- subtract(Faults, [fn, fp, undetermined], []).
+
+next_questions(Faults, Qs) :-
+    findall(Need-(R-F-C),
+            ( open_rule(Faults, R-F, Unknown), member(C, Unknown),
+              missing_for(C, Ms), member(Need, Ms) ), Raw),
+    keysort(Raw, Sorted), group_pairs_by_key(Sorted, Qs0),
+    findall(Need-Why, ( member(Need-W0, Qs0), sort(W0, Why) ), Qs).

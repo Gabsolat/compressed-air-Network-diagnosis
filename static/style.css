@@ -175,3 +175,6 @@ footer.site-foot{border-top:1px solid var(--line);margin-top:40px;padding:20px 0
   .step,.card,.chart-card{break-inside:avoid}
   .summary{padding-top:0}
 }
+td ul{margin:0;padding-left:18px}
+td li{margin:2px 0}
+h2 + .card.table-scroll{margin-top:4px}

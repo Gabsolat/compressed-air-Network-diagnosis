@@ -62,6 +62,16 @@ sourcebook), dew-point class (ISO 8573-1), compressor acceptance basis (ISO 1217
 These foundational references are ones I am fairly confident exist, but **check every detail against the originals**. The 70-90 source
 target (at least 60 % recent peer-reviewed) still needs a proper database search (Scopus/IEEE/ScienceDirect) managed in EndNote. I have not built that list.
 
+## 5b. Expert-system architecture (the classical components)
+| Component | Where |
+|---|---|
+| Knowledge base (facts, rules, causal links, limits, sources) | `config.pl`, `network.pl`, `rules.pl`; browsable at `/knowledge` |
+| Working memory (readings and derived symptoms) | `obs/2`, `suspect/1` in `calc.pl`, `holds/1` in `conditions.pl` |
+| Inference engine (deductive, abductive, consistency-based) | `reasoning.pl` |
+| Explanation facility (how each conclusion was reached, what was rejected) | `explain.pl`, report steps 3-6 |
+| Consultation (asks for the evidence that would settle undecided rules) | `next_questions/2` in `explain.pl`, report step 7 |
+| User interface | `server.pl`, `web.pl`, `static/` |
+
 ## 6. Step 5-7: design
 Files: `config.pl` (thresholds) | `network.pl` (graph, fault universe, causal and propagation knowledge, evidence weights) |
 `calc.pl` (engineering calculations: eqs. 10-12, 15-16, 20-26, 30-33) | `conditions.pl` (numeric to symbolic `holds/1`; missing evidence is never true) |
@@ -102,10 +112,10 @@ Files: `Dockerfile`, `server.pl` (HTTP routes), `web.pl` (HTML pages), `static/`
 1. Push this folder to GitHub (commit `data/cases.pl`; the image does not need Python).
 2. Render: New > Web Service > connect the repo > Language/Runtime: **Docker**. The repo root is this folder (`Dockerfile` next to `main.pl`), so leave Root Directory empty.
 3. Health check path: `/health`. Render supplies `PORT`; the server reads it (default 10000).
-4. Pages: `/` (input form with a live pressure-profile chart, a readings counter and a guide to what the entered readings can assess), `/diagnose` (detailed diagnosis report),
+4. Pages: `/knowledge` (the visible knowledge base), `/` (input form with a live pressure-profile chart, a readings counter and a guide to what the entered readings can assess), `/diagnose` (detailed diagnosis report),
    `/cases` (built-in test cases), `/demo?id=c001`, `/results` (evaluation report), `/health`.
-   The report has a pressure-profile chart, a section index and seven numbered steps: readings received (and any sensor judged implausible), engineering checks (formula, value, limit, bar against limit, result),
-   rules that fired with their knowledge source, abductive and consistency-based reasoning, what was ruled out, the evidence table with rejected hypotheses, and a prioritised maintenance plan.
+   The report has a pressure-profile chart, a section index and eight numbered steps: readings received (and any sensor judged implausible), engineering checks (formula, value, limit, bar against limit, result),
+   rules that fired with their knowledge source, abductive and consistency-based reasoning, what was ruled out, the evidence table with rejected hypotheses, the further evidence the system asks for, and a prioritised maintenance plan.
    Design: `static/style.css` and `static/app.js`, which `web.pl` embeds directly into every page, so no separate file route is needed (no external libraries or fonts; light and dark themes; print stylesheet). `web.pl` maps every internal atom to readable text with true subscripts, so underscores never appear in the web app.
    The terminal output of `main.pl` still shows raw atom names.
 Local test: `docker build -t krr31 . && docker run -p 10000:10000 krr31`, then open `http://localhost:10000/results`.

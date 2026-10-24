@@ -145,13 +145,13 @@ page_start(Title) :-
     format("<style>"), emit_asset('style.css'), format("</style></head><body>"),
     format("<header class=\"site\"><div class=\"wrap bar\"><a class=\"brand\" href=\"/\">"),
     format("<svg class=\"mark\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" aria-hidden=\"true\"><path d=\"M3.5 17a8.5 8.5 0 0 1 17 0\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><path d=\"M12 17l4.2-5.4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><circle cx=\"12\" cy=\"17\" r=\"1.8\" fill=\"currentColor\"/></svg>"),
-    format("<span>Compressed-air diagnosis</span></a>"),
-    format("<nav aria-label=\"Main\"><a href=\"/\">Diagnose</a><a href=\"/cases\">Test cases</a><a href=\"/results\">Evaluation</a></nav>"),
+    format("<span>Compressed-air expert system</span></a>"),
+    format("<nav aria-label=\"Main\"><a href=\"/\">Diagnose</a><a href=\"/knowledge\">Knowledge base</a><a href=\"/cases\">Test cases</a><a href=\"/results\">Evaluation</a></nav>"),
     format("<button type=\"button\" id=\"theme-toggle\" class=\"btn ghost\">Dark mode</button></div></header><main id=\"main\">"),
     asset_warning.
 page_end :-
     format("</main><footer class=\"site-foot\"><div class=\"wrap\">"),
-    format("Decision support only. The limits used here are engineering assumptions of this prototype and must be confirmed against your plant standards. The built-in test cases are synthetic."),
+    format("A rule-based expert system written in Prolog, with a knowledge base, an inference engine and an explanation facility. The limits in the knowledge base are engineering assumptions awaiting verification against cited sources and plant standards. The built-in test cases are synthetic."),
     format("</div></footer><script>"), emit_asset('app.js'), format("</script></body></html>~n").
 
 chips([], _) :- !, format("<span class=\"muted\">none</span>").
@@ -300,9 +300,9 @@ example_label(x_sensor, 'Faulty sensor').       example_label(f_multi, 'Two faul
 
 form_page(Pre, Errors) :-
     page_start('Diagnose'),
-    format("<section class=\"intro wrap\"><div><h1>Compressed-air network fault diagnosis</h1>"),
+    format("<section class=\"intro wrap\"><div><h1>Compressed-air network fault diagnosis expert system</h1>"),
     format("<p class=\"lead\">Enter the readings you have from your compressor station and distribution network. "),
-    format("The expert system checks them against engineering rules, explains each step of its reasoning and recommends corrective maintenance.</p>"),
+    format("The system reasons over its engineering knowledge base, explains how it reached each conclusion, asks for the further evidence it needs and recommends corrective maintenance.</p>"),
     format("<p class=\"muted\">It looks for leaks, filter and dryer problems, compressor and regulator faults, receiver and line restrictions, and faulty instruments. "),
     format("Leave a field blank if you have no measurement, and never guess one. The grey numbers inside the fields are typical healthy values.</p></div>"),
     format("<figure class=\"chart-card\"><figcaption>Pressure profile along your network</figcaption>"),
@@ -368,14 +368,15 @@ render_diagnosis(Obs, Heading, Sub, EditLink, TrueOpt) :-
        format("<p>Check the readings and try again. <a href=\"/\">Back to the form</a></p></div>"),
        page_end ).
 
-compute_diagnosis(Obs, d(Faults, Info, Expl, Comp, Items, Sus)) :-
+compute_diagnosis(Obs, d(Faults, Info, Expl, Comp, Items, Sus, Qs)) :-
     diagnose(Obs, result(Faults, Info)),
     explain(Faults, Info, Expl), competing(Faults, Comp), plan(Faults, Items),
+    next_questions(Faults, Qs),
     findall(S, suspect(S), Sus).
 
 obs_of_case(Obs) :- findall(V=X, obs(V, X), Obs).
 
-render_data(d(Faults, Info, Expl, Comp, Items, Sus), Heading, Sub, EditLink, TrueOpt) :-
+render_data(d(Faults, Info, Expl, Comp, Items, Sus, Qs), Heading, Sub, EditLink, TrueOpt) :-
     Info = info(O, Fired, Res0, Add, _, Res1),
     obs_of_case(Obs), obs_query(Obs, Q),
     page_start('Diagnosis report'),
@@ -386,7 +387,7 @@ render_data(d(Faults, Info, Expl, Comp, Items, Sus), Heading, Sub, EditLink, Tru
     format("<div id=\"profile\" class=\"profile\" data-obs=\"~w\"></div><p class=\"chart-note\" id=\"profile-note\"></p></figure></section>", [Q]),
     format("<div class=\"wrap report\"><nav class=\"toc\" aria-label=\"Report sections\">"),
     forall(member(N-T, [1-'Readings received', 2-'Engineering checks', 3-'Rules that fired', 4-'Further reasoning',
-                        5-'What was ruled out', 6-'Why this diagnosis', 7-'Maintenance plan']),
+                        5-'What was ruled out', 6-'Why this diagnosis', 7-'Evidence the system asks for', 8-'Maintenance plan']),
            format("<a href=\"#s~w\">~w &nbsp;~w</a>", [N, N, T])),
     format("</nav><div>"),
     step_inputs(Obs, Sus),
@@ -395,6 +396,7 @@ render_data(d(Faults, Info, Expl, Comp, Items, Sus), Heading, Sub, EditLink, Tru
     step_reasoning(O, Res0, Add, Res1),
     step_ruled_out(O),
     step_explanation(Expl, Comp),
+    step_questions(Qs),
     step_plan(Items),
     format("</div></div>"),
     page_end.
@@ -535,7 +537,7 @@ step_explanation(Expl, Comp) :-
     step_close.
 
 step_plan(Items) :-
-    step_open(7, 'Maintenance plan'),
+    step_open(8, 'Maintenance plan'),
     (  Items == [] -> format("<div class=\"card muted\">No corrective action is required, or no plan is available for this diagnosis.</div>")
     ;  forall(member(item(P, Fam, Acts, Why), Items),
               ( humanize(Fam, FamH), humanize(P, PH),
@@ -543,6 +545,68 @@ step_plan(Items) :-
                 forall(member(A, Acts), ( action_html(A, AH), format("<li>~w</li>", [AH]) )),
                 format("</ol><span class=\"muted\">~w</span></div>", [Why]) )) ),
     step_close.
+
+need_html(any(L), H) :- !,
+    findall(X, (member(V, L), var_html(V, X)), Xs), atomic_list_concat(Xs, ' or ', Joined),
+    format(atom(H), 'a reading of ~w', [Joined]).
+need_html(V, H) :- var_html(V, VH), var_desc(V, D), format(atom(H), '~w <span class="muted">(~w)</span>', [VH, D]).
+
+step_questions(Qs) :-
+    step_open(7, 'Evidence the system asks for'),
+    format("<div class=\"card\">"),
+    (  Qs == []
+    -> format("<p class=\"muted\">No further reading would change this diagnosis. Every rule that could still fire has either been satisfied or ruled out.</p>")
+    ;  format("<p>A consultation with an expert system does not stop at the first answer. These are the readings that would let a rule that is not yet decided fire or be rejected.</p>"),
+       format("<div class=\"table-scroll\"><table><tr><th>Please supply</th><th>Why the system asks</th></tr>"),
+       forall(member(Need-Whys, Qs),
+              ( need_html(Need, NH), format("<tr><td>~w</td><td><ul>", [NH]),
+                forall(member(R-F-C, Whys),
+                       ( basis_html(R, RH), fault_html(F, FH), cond_html(C, CH),
+                         format("<li>~w would conclude ~w once <em>~w</em> is known.</li>", [RH, FH, CH]) )),
+                format("</ul></td></tr>") )),
+       format("</table></div>") ),
+    format("</div>"),
+    step_close.
+
+% ---------- the knowledge base, made visible ----------
+knowledge_page :-
+    aggregate_all(count, rule(_,_,_,_), NR), aggregate_all(count, prop(_,_), NP),
+    aggregate_all(count, threshold(_,_), NT), aggregate_all(count, symptom(_), NS),
+    page_start('Knowledge base'),
+    format("<div class=\"wrap\" style=\"padding-top:36px\"><h1>Knowledge base</h1>"),
+    format("<p class=\"lead\">Everything the system knows is written down here as facts and rules, separate from the inference engine that uses them. ~d diagnostic rules, ~d causal links, ~d symptoms and ~d numeric limits.</p>", [NR, NP, NS, NT]),
+    format("<div class=\"card\"><strong>How the parts fit together</strong><ul>"),
+    format("<li><strong>Knowledge base:</strong> fault descriptions, diagnostic rules, causal links, normal-behaviour evidence and limits (this page).</li>"),
+    format("<li><strong>Working memory:</strong> the readings you supply and the symptoms derived from them.</li>"),
+    format("<li><strong>Inference engine:</strong> deductive rules, abductive explanation and consistency-based diagnosis, all in Prolog.</li>"),
+    format("<li><strong>Explanation facility:</strong> the numbered steps of every report show how each conclusion was reached.</li>"),
+    format("<li><strong>Consultation:</strong> the system asks for the further evidence that would settle undecided rules.</li></ul></div>"),
+    format("<h2>Faults</h2><div class=\"card table-scroll\"><table><tr><th>Fault</th><th>Meaning</th><th>Typical causes</th><th>Consequences</th></tr>"),
+    forall(member(F, [fl,fc,ff,fd,fr,ft,fv,fs,fp,fn]),
+           ( fault_html(F, FH), fault_info(F, M, C, Q),
+             format("<tr><td>~w</td><td>~w</td><td>~w</td><td>~w</td></tr>", [FH, M, C, Q]) )),
+    format("</table></div>"),
+    format("<h2>Diagnostic rules</h2><div class=\"card table-scroll\"><table><tr><th>Rule</th><th>Conclusion</th><th>If all of these hold</th><th>Source</th></tr>"),
+    forall(rule(R, F, Conds, Src),
+           ( basis_html(R, RH), fault_html(F, FH),
+             format("<tr><td>~w</td><td>~w</td><td>", [RH, FH]), chips(Conds, cond_html),
+             format("</td><td>"), ( source(Src, D) -> format("~w", [D]) ; format("~w", [Src]) ), format("</td></tr>") )),
+    format("</table></div>"),
+    format("<h2>Causal knowledge</h2><div class=\"card table-scroll\"><table><tr><th>Fault</th><th>Directly causes</th></tr>"),
+    forall(explains_direct(F, L), ( fault_html(F, FH), format("<tr><td>~w</td><td>", [FH]), chips(L, cond_html), format("</td></tr>") )),
+    format("</table><p><strong>Propagation:</strong> a symptom can cause a downstream symptom.</p><ul>"),
+    forall(prop(A, B), ( cond_html(A, AH), cond_html(B, BH), format("<li>~w causes ~w</li>", [AH, BH]) )),
+    format("</ul></div>"),
+    format("<h2>Normal-behaviour evidence</h2><div class=\"card table-scroll\"><table><tr><th>Fault</th><th>Is ruled out when all of these are normal</th></tr>"),
+    forall(exonerated_by(F, L), ( fault_html(F, FH), format("<tr><td>~w</td><td>", [FH]), chips(L, cond_html), format("</td></tr>") )),
+    format("</table></div>"),
+    format("<h2>Numeric limits</h2><div class=\"card table-scroll\"><table><tr><th>Limit</th><th>Value</th><th>Status</th></tr>"),
+    forall(threshold(N, V), ( humanize(N, NH), format("<tr><td>~w</td><td class=\"value\">~w</td><td>Engineering assumption, to be verified</td></tr>", [NH, V]) )),
+    format("</table></div>"),
+    format("<h2>Knowledge sources</h2><div class=\"card\"><ul>"),
+    forall(source(Id, Desc), ( humanize(Id, IH), format("<li><strong>~w:</strong> ~w</li>", [IH, Desc]) )),
+    format("</ul></div></div>"),
+    page_end.
 
 % ---------- entry points used by server.pl ----------
 form_for_request(Request) :- prefill(Request, Pre), form_page(Pre, []).

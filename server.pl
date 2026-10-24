@@ -19,6 +19,7 @@
 :- http_handler(root(.),        home_h,     []).
 :- http_handler(root(diagnose), diagnose_h, []).
 :- http_handler(root(cases),    cases_h,    []).
+:- http_handler(root(knowledge), knowledge_h, []).
 :- http_handler(root(demo),     demo_h,     [prefix]).
 :- http_handler(root(results),  results_h,  [time_limit(infinite)]).
 :- http_handler(root(health),   health,     []).
@@ -30,6 +31,7 @@ safely(Goal) :- catch(with_mutex(krr, Goal), E, (print_message(error, E))).
 home_h(Request)     :- safely(form_for_request(Request)).
 diagnose_h(Request) :- safely(diagnose_request(Request)).
 cases_h(_)          :- safely(cases_page).
+knowledge_h(_)      :- safely(knowledge_page).
 results_h(_)        :- safely(results_page).
 health(_)           :- format("Content-Type: text/plain~n~nok~n").
 

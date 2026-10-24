@@ -80,3 +80,27 @@ exonerated_by(fr, [cycling_ok, drain_ok]).
 exonerated_by(ft, [header_ok]).
 exonerated_by(fv, [reg_not_implicated]).
 exonerated_by(fs, [sensors_checked_ok]).
+
+% measurements each symbolic condition depends on (any([...]) = at least one of them)
+cond_needs(leak_fraction_high, [m_in, m_use]).   cond_needs(leak_fraction_ok, [m_in, m_use]).
+cond_needs(ultrasonic_high, [l_a]).              cond_needs(ultrasonic_ok, [l_a]).
+cond_needs(cycling_high, [cyc]).                 cond_needs(cycling_ok, [cyc]).
+cond_needs(capacity_deficit, [m_in, load]).      cond_needs(capacity_ok, [m_in, load]).
+cond_needs(spec_power_high, [p_sh, m_in]).
+cond_needs(disch_temp_high, [t_d]).
+cond_needs(vibration_high, [v_rms]).
+cond_needs(filter_dp_high, [dp_filter, any([m_in, m_use])]).
+cond_needs(filter_ok,      [dp_filter, any([m_in, m_use])]).
+cond_needs(dryer_dp_high,  [dp_dryer, any([m_in, m_use])]).
+cond_needs(dryer_dp_ok,    [dp_dryer, any([m_in, m_use])]).
+cond_needs(dewpoint_high, [t_dew]).              cond_needs(dewpoint_ok, [t_dew]).
+cond_needs(header_dp_high, [p_hdr, dp_dryer, dp_filter, any([p_rec, p_rec_b, p_dis]), any([m_in, m_use])]).
+cond_needs(header_ok,      [p_hdr, dp_dryer, dp_filter, any([p_rec, p_rec_b, p_dis]), any([m_in, m_use])]).
+cond_needs(drain_low, [c_water]).                cond_needs(drain_ok, [c_water]).
+cond_needs(reg_under, [p_set, p_use, p_hdr]).
+cond_needs(reg_over,  [p_set, p_use]).
+cond_needs(prec_disagree, [p_rec, p_rec_b]).
+cond_needs(prec_out_of_range, [p_rec, p_dis]).
+cond_needs(leak_unsupported, [m_in, m_use, l_a]).
+cond_needs(ultrasonic_unobserved, []).
+cond_needs(leak_fraction_unobserved, []).
